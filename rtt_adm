@@ -1,0 +1,125 @@
+#!/bin/bash
+
+self=$(readlink -f "$0")
+rtt_path=$(dirname "$self")
+#rtt_path=$(dirname "$rtt_path")
+self=$(basename "$self")
+shlib_path=$rtt_path/misc/
+
+source "$shlib_path/common.sh"
+
+action_name()
+{
+    case $1 in
+        install)
+            echo "安装"
+        ;;
+        prepare)
+            echo "准备"
+        ;;
+        build)
+            echo "生成"
+        ;;
+    esac
+}
+
+perform_action()
+{
+    local module=""
+    local ret=0
+
+    pushd "$rtt_path"
+    local msg="执行$(action_name $action)操作"
+    dbg "$msg ..."
+
+    #for module in $(ls -d */ | grep -v misc | tr -d "/"); do
+    if test -d ${prod_name}_clnt; then
+        local module_list="radio_test_tool ${prod_name}_clnt"
+    elif test -d ${prod_type}_clnt; then
+        local module_list="radio_test_tool ${prod_type}_clnt"
+    else
+        local module_list="radio_test_tool"
+    fi
+
+    for module in $module_list; do
+        pushd "$rtt_path/$module/bin"
+
+        local msg1="为模块$module执行$(action_name $action)操作"
+
+        dbg "$msg1 ..."
+        BEACON_SUPPORT=$beacon_suport DONUT_SUPPORT=$donut_support FCC_SUPPORT=$fcc_support ./"$action"
+        checkrc $? "$msg1" || ret=1
+
+        popd
+    done
+
+    popd
+
+    checkrc $ret "$msg"
+
+    return $ret
+}
+
+usage()
+{
+    echo "Usage: "
+    echo "$self <prepare|build|install> <wifi|wifi-ble|cherry1s|donut>"
+}
+
+sudoer_confirm()
+{
+    if ! grep $USER /etc/sudoers | grep -q NOPASSWD; then
+        dbg "当前用户不能免密码执行sudo, 更新中..."
+        sudo echo "$USER     ALL=(ALL) NOPASSWD:ALL" | sudo tee -a /etc/sudoers > /dev/null
+        checkrc $? "加入免密码sudo权限"
+    fi
+}
+
+action=$2
+prod_name=$1
+beacon_suport=0
+donut_support=0
+fcc_support=0
+
+WIFI_PROD_LIST="wonder|mango|elf"
+# list of
+
+case "$prod_name" in
+    wonder|mango|dolphin|pitaya)
+        dev_type=wifi
+    ;;
+    nox|luna|eos|eos_pro)
+        beacon_suport=1
+        dev_type=wifi-ble
+    ;;
+    donut)
+        donut_support=1
+        dev_type=donut
+    ;;
+    cherry1s)
+        beacon_suport=1
+        fcc_support=1
+        dev_type=wifi-ble
+        ;;
+    *)
+        echo "不支持的设备类型"
+        usage
+        exit 1
+        ;;
+
+esac
+
+case "$action" in
+    prepare|build|install)
+        sudoer_confirm
+        perform_action
+        ;;
+    "")
+        for action in prepare build install; do
+            perform_action || exit 1
+        done
+        ;;
+    *)
+        usage
+        ;;
+esac

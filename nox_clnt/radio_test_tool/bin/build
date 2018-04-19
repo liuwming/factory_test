@@ -1,0 +1,58 @@
+#!/bin/bash
+
+self=$(readlink -f "$0")
+module_bin_path=$(dirname "$self")
+module_path=$(dirname "$module_bin_path")
+rtt_path=$(dirname "$module_path")
+module=$(basename "$module_path")
+self=$(basename "$self")
+shlib_path=$rtt_path/misc/
+
+source "$shlib_path/common.sh"
+
+pushd $module_path
+
+# Step 1, build rtt sever and client api
+pushd src
+make clean && make all
+popd
+
+test -x ./obj/rtt
+checkrc $? "build rtt server" || exit 1
+
+cp ./obj/rtt ./src/*.sh $module_bin_path
+
+# Step 2, begin to generate java API wrapper
+which swig > /dev/null
+checkrc $? "check dependencies : swig" || exit 0
+which java > /dev/null
+checkrc $? "check dependencies : java" || exit 0
+
+java_api_path="./java/com/yeelight/rtt"
+
+rm -f $java_api_path/*
+
+cp ./src/rtt_interface.i ./inc/rtt_interface.h ./java
+cp ./src/rtt_interface.c ./src/*.java ./src/manifest ./inc/rtt_interface.h $java_api_path
+
+cd ./java
+swig -java -package com.yeelight.rtt -outdir com/yeelight/rtt rtt_interface.i
+
+cp rtt_interface_wrap.c com/yeelight/rtt
+rm rtt_interface*
+
+cd ./com/yeelight/rtt
+
+gcc -c -fPIC rtt_interface_wrap.c rtt_interface.c -I/usr/lib/jvm/java-8-openjdk-amd64/include/ -I/usr/lib/jvm/java-8-openjdk-amd64/include/linux/ -I/usr/lib/jvm/java-7-openjdk-amd64/include/ -I/usr/lib/jvm/java-7-openjdk-amd64/include/linux/
+
+gcc -shared  rtt_interface.o rtt_interface_wrap.o -o librtt_interface.so
+
+javac *.java
+cd ../../..
+
+jar cvfm rtt.jar com/yeelight/rtt/manifest com/yeelight/rtt/*.class
+cp com/yeelight/rtt/*.so .
+
+ls ./com/yeelight/rtt/* | grep -v ".java" | xargs rm -rf
+
+exit 0

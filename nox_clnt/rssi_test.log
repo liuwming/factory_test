@@ -1,0 +1,20 @@
+--------result--------
+-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[34:ce:00:8d:f1:9b] IP[192.168.145.199]
+[OK]
+--------result--------
+-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[34:ce:00:8d:f1:9b] IP[192.168.145.199]
+[OK]
+--------result--------
+-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[34:ce:00:8d:f1:9b] IP[192.168.145.199]
+[OK]
+--------result--------
+-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[34:ce:00:8d:f1:9b] IP[192.168.145.199]
+[OK]
+--------result--------
+-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[34:ce:00:8d:f1:9b] IP[192.168.145.199]
+[NG]	yeelink.light.ceiling6	"7"	0	0	-17	-54	-14	29	19

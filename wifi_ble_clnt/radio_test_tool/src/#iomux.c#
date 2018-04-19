@@ -1,0 +1,174 @@
+#include <unistd.h>
+#include <sys/epoll.h>
+#include <string.h>
+#include <errno.h>
+#include <fcntl.h>
+#include "iomux.h"
+#include "timer.h"
+
+static int io_evt_map(int);
+
+static iomux_cb_t  iomux_cb;
+static iomux_cb_t  *iomux_cp = &iomux_cb;
+
+int iomux_init()
+{
+    if (iomux_cp->init) {
+        return -1;
+    }
+
+    bzero(iomux_cp, sizeof(iomux_cb_t));
+    iomux_cp->epollfd = epoll_create(1);
+
+    if (iomux_cp->epollfd == -1) {
+    }
+
+    iomux_cp->init = 1;
+    return 0;
+}
+
+
+int iomux_deinit()
+{
+    iomux_cp->init = 0;
+    close(iomux_cp->epollfd);
+
+    return 0;
+}
+
+int iomux_add(io_inst_t* new)
+{
+    struct epoll_event ev;
+    int rc;
+    long flag;
+
+    if (new->nonblock) {
+        flag = fcntl(new->fd, F_GETFL, NULL);
+        if (flag < 0) {
+            return -1;
+        }
+        rc = fcntl(new->fd, F_SETFL, O_NONBLOCK | flag);
+        if (rc < 0) {
+            return rc;
+        }
+    }
+
+    ev.events = io_evt_map(new->evt);
+    ev.data.ptr = new;
+
+    if (epoll_ctl(iomux_cp->epollfd, EPOLL_CTL_ADD, new->fd, &ev) == -1) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int iomux_del(io_inst_t* inst)
+{
+    struct epoll_event ev;
+    int rc;
+
+    rc = epoll_ctl(iomux_cp->epollfd, EPOLL_CTL_DEL, inst->fd, &ev);
+
+    if (rc < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+int iomux_mod(io_inst_t* change)
+{
+    struct epoll_event ev;
+    int rc;
+
+    ev.events = io_evt_map(change->evt);                   
+    ev.data.ptr = change;
+
+    rc = epoll_ctl(iomux_cp->epollfd, EPOLL_CTL_MOD, change->fd, &ev);
+
+    if (rc < 0) {
+        return -1;
+    }
+
+    return 0;
+}
+
+void iomux_loop()
+{
+    struct epoll_event events[MAX_EVENTS];
+    int nfds, i, rc;
+    io_inst_t* inst;
+    ms_t ms;
+    int timeout, err;
+    
+ again:
+    rc = get_next_timeout(&ms);
+    if (rc < 0) {
+        timeout = -1;
+    } else {
+        timeout = ms;
+    }
+
+    fds = epoll_wait(iomux_cp->epollfd, events, MAX_EVENTS, timeout);
+    err = errno;                /* save errno before we do another call */
+    time_update();    
+
+    if (nfds == -1) {
+        if (err == EINTR) {
+            goto again;        
+        } else {
+            return;
+        }
+    }
+
+    for (i = 0; i < nfds; i++) {
+
+        inst = (io_inst_t*)events[i].data.ptr;
+
+        /* user want to remove, but we failed, so skip to avoid bothering user */
+        if (inst->error) {
+            continue;   
+        }
+        if (inst->oneshot) {
+            rc = iomux_del(inst);
+            close(inst->fd);
+            if (rc < 0) {
+                inst->error = 1;
+            }
+        }
+
+        if (events[i].events | EPOLLIN) {
+
+            if (inst->on_recv) {
+                rc = inst->on_recv(inst);
+            }
+        } else if (events[i].events | EPOLLOUT)  {
+
+            if (inst->on_writable) {
+                rc = inst->on_writable(inst);
+            }
+        } else if (events[i].events | EPOLLERR)  {
+
+            if (inst->on_err) {
+                rc = inst->on_err(inst);
+            }
+        } else {
+            continue;
+        }
+    }
+
+    proc_timer();
+}
+
+
+static int io_evt_map(int evt) 
+{
+    int tmp = 0; 
+
+    tmp |= (evt & IO_EVENT_IN) ?  EPOLLIN : 0;  
+    tmp |= (evt & IO_EVENT_OUT) ? EPOLLOUT : 0; 
+    tmp |= (evt & IO_EVENT_ERR) ? EPOLLERR : 0; 
+
+    return tmp;
+}

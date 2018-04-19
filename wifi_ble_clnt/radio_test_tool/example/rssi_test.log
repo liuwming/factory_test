@@ -1,0 +1,34 @@
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[IP Allocated] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[NG]
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Probing Failed] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[NG]
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[IP Allocated] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[NG]
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Probing Failed] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[NG]
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[OK]	""	5	0	-14	-18	-2	11	11
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Probing Failed] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[NG]
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Probing Failed] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[NG]
+--------result--------
+-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv
++Device: Status[Device Connected] MAC[28:6c:07:13:f4:58] IP[192.168.0.183]
+[OK]	""	7	0	-14	-21	-4	32	32
