@@ -144,12 +144,14 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
 
     memset(buf, 0, sizeof buf);
 
-    l = sprintf(buf, "--------%s--------\n" , result->type == RT_CMD_STATUS ?
+    l = sprintf(buf, "\n\n--------%s--------\n" , result->type == RT_CMD_STATUS ?
                 "status" : "result");
-    l += sprintf(buf + l, "-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv\n");
-
+    if(result->type != RT_CMD_STATUS){
+        l += sprintf(buf + l, "共测试[%d]台设备,结果如下：\n",(int)result->dev_count );
+    }
+    //l += sprintf(buf + l, "-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv\n");
     for (i = 0; i < (int)result->dev_count; i++) {
-        l += sprintf(buf + l, "+Device: Status[%s] MAC[%s] IP[%s]\n", res(state), res(mac), res(ip));
+        //l += sprintf(buf + l, "+Device: Status[%s] MAC[%s] IP[%s]\n", res(state), res(mac), res(ip));
         if (result->type == RT_CMD_RESULT) {
             pass = 1;
 
@@ -158,42 +160,36 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
                 pass = 0;
             }
 
-            if (res(min_rssi) < RSSI_THRESH_MIN) {
-                printf("error : %s 最低信号强度(=%d)过低\n", res(mac), res(min_rssi));
-                pass = 0;
-            }
+            //if (res(min_rssi) < RSSI_THRESH_MIN) {
+            //    printf("error : %s 最低信号强度(=%d)过低\n", res(mac), res(min_rssi));
+            //    pass = 0;
+            //}
 
             if (res(packet_recv) < 10) {
                 printf("error : %s 收到的数据包数量(=%d)太低\n", res(mac), res(packet_recv));
                 pass = 0;
-            } else if ((100 * res(packet_recv)) / res(packet_send) < (100 - PACKAGE_LOSS_THRESH)) {
+            } 
+
+            else if ((100 * res(packet_recv)) / res(packet_send) < (100 - PACKAGE_LOSS_THRESH)) {
                 printf("error : %s 丢包率(%d/%d)太高\n", res(mac), res(packet_send)-res(packet_recv), res(packet_send));
                 pass = 0;
             }
 
             if (pass) {
-                l += sprintf(buf + l, "[%s]", "OK");
+                printf("测试通过\n");
                 control_dev(hdl, result->body.status[i].mac, 0);
+                l += sprintf(buf + l, "测试结果[%s],设备状态[%s] MAC[%s] IP[%s]\n", "成功", res(state), res(mac), res(ip));
                 passed_dev[i] = 1;
                 add_beacon = 1;
             }
             else {
+                printf("测试失败\n");
                 control_dev(hdl, result->body.status[i].mac, 1);
-                l += sprintf(buf + l, "[%s]", "NG");
+                l += sprintf(buf + l, "测试结果[%s],设备状态[%s] MAC[%s] IP[%s]\n", "失败", res(state), res(mac), res(ip));
                 passed_dev[i] = 0;
             }
         }
 
-        if (add_beacon) {
-            for (i = 0; i < (int)result->dev_count; i++) {
-                if (passed_dev[i]) {
-                    strcpy(beacon_cmd.mac_dev, result->body.status[i].mac);
-                    strcpy(beacon_cmd.mac_beacon, beacon_mac);
-                    strcpy(beacon_cmd.key, beacon_key);
-                    control_dev(hdl, &beacon_cmd, 3);
-                }
-            }
-        }
 
         if (strcmp(res(state), STATE_DEV_CONN) == 0) {
             l += sprintf(buf + l, "\t%s", res(model));
@@ -211,6 +207,7 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
 
     printf("%s", buf);
 
+
 #ifdef LOG_RESULT
     if (result->type == RT_CMD_RESULT) {
         FILE *fp;
@@ -222,6 +219,17 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
         fclose(fp);
     }
 #endif
+
+   if (add_beacon) {
+       for (i = 0; i < (int)result->dev_count; i++) {
+           if (passed_dev[i]) {
+               strcpy(beacon_cmd.mac_dev, result->body.status[i].mac);
+               strcpy(beacon_cmd.mac_beacon, beacon_mac);
+               strcpy(beacon_cmd.key, beacon_key);
+               control_dev(hdl, &beacon_cmd, 3);
+           }
+       }
+   }
 }
 
 static void test_stop(rtt_handle_t hdl)
