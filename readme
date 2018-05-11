@@ -1,0 +1,6 @@
+2018-05-03
+1.版本号1.0
+2.安装步骤 ./rtt_adm nox prepare ./rtt_adm nox build  ./rtt_adm nox install
+3.安装完成后在桌面生成两个图标，双击运行。
+
+
