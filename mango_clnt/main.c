@@ -249,10 +249,10 @@ int main(int argc, char** argv)
 
     hdl = rtt_connect(5, &err, RTT_PROTO_UDP, argv[1]);
     if (!hdl) {
-        printf("connect to RTT server failed %d.\n", err);
+        printf("连不上服务器 %d.\n", err);
         return -1;
     }
-
+    printf("客户端开始运行，请根据说明输入相应代码测试!\n");
     while ( (c = getchar()) != 'q') {
         switch(c) {
         case '1':
