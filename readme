@@ -4,3 +4,8 @@
 3.安装完成后在桌面生成两个图标，双击运行。
 
 
+2018-05-25
+1.增加了mango客户端
+2.安装步骤./rtt_adm mango prepare ./rtt_adm mango build  ./rtt_adm mango install
+3.安装完成后在桌面生成两个图标，双击运行。
+
