@@ -1,0 +1,8 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Name=安裝
+Comment=rtt client demo
+Exec=$HOME/rtt/misc/install.sh
+Icon=
+Terminal=true
+Type=Application
