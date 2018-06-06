@@ -78,7 +78,9 @@ char TOKEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF
 };
 
-#define TIME_SPACE_DURATION 80
+#define TIME_SPACE_DURATION 60
+#define TIME_REPEAT_SPACE_SCANIP 15//默认1.5秒再次去搜索一次 
+
 static radio_test_t   rt_cb = {
     .state = RT_IDLE,
     .param = {{1, TIME_SPACE_DURATION}, {1, 1}, {1, -50}, {1, -60}, {1, -40}, {1, 10}},
@@ -539,7 +541,7 @@ static void rt_dev_tmr_func(int tid, void* data)
             rt_dev_miio_start(dev);
         } else {
             RT_ERR("No ip found.\n");
-            dev_start_tmr(dev, 30, RT_DEV_TMR_SCANIP, 0);
+            dev_start_tmr(dev, TIME_REPEAT_SPACE_SCANIP, RT_DEV_TMR_SCANIP, 0);
         }
     } else if (tid == RT_DEV_TMR_SENDMSG) {
         message_r("RT_DEV_TMR_SENDMSG timeout dev_rpc_send [get_prop] >>>>>\n");
