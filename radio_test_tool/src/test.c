@@ -720,7 +720,7 @@ static rt_dev_t* rt_add_dev(unsigned char* mac)
     dev->max_rssi = -1000;
     dev->rt_dev_state = RT_DEV_START;
     message_r("rt_add_dev rt_dev_state = RT_DEV_START \n");
-    dev_start_tmr(dev, 30, RT_DEV_TMR_SCANIP, 0); /* scan for IP every 3 secs */
+    dev_start_tmr(dev, TIME_REPEAT_SPACE_SCANIP, RT_DEV_TMR_SCANIP, 0); /* scan for IP every 3 secs */
     dev->brs = -1;
     dev->brf = -1;
     return dev;
