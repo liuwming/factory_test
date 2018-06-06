@@ -78,9 +78,10 @@ char TOKEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF
 };
 
+#define TIME_SPACE_DURATION 80
 static radio_test_t   rt_cb = {
     .state = RT_IDLE,
-    .param = {{1, 40}, {1, 1}, {1, -50}, {1, -60}, {1, -40}, {1, 10}},
+    .param = {{1, TIME_SPACE_DURATION}, {1, 1}, {1, -50}, {1, -60}, {1, -40}, {1, 10}},
     .dev_cnt = 0,
     .dev_list = {.prev = &(rt_cb.dev_list), .next = &(rt_cb.dev_list)}
 };
