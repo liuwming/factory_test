@@ -255,6 +255,9 @@ static int rt_miio_recv(io_inst_t* inst)
 
 #if !DONUT_SUPPORT
         p_model_name = strstr(rsp, "yeelink.");
+        if(p_model_name == NULL){
+            p_model_name = strstr(rsp, "yilai.");
+        }
         if (p_model_name) {
 #endif
             del_timer(&(dev->tmr));

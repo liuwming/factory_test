@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
+char ver[] = "1.6"
 static int rt_prepare(int);
 
 static int rt_prepare(int nr_itfc)
@@ -73,6 +74,7 @@ int main(int argc, char** argv)
     int proto = RT_CMD_PROTO_UNIX;
     char *ip;
 
+    printf("\n--------Tool ver :v%s-----------\n\n\n", ver);
     if (argc < 2) {
         printf("usage: %s <mac addresses of wlan> [ip address of eth0]\n", argv[0]);
         return -1;
