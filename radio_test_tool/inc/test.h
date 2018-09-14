@@ -76,6 +76,7 @@ extern char universal_beacon_key[];
 #define RT_DEV_TMR_PROBE     2
 #define RT_DEV_TMR_SENDMSG   3
 #define RT_DEV_TMR_TEST_EXIT_OK 4 //waiting for miio_test_exit_ok timeout
+#define RT_DEV_TMR_DELAY_BEACON_SEND_ALL 5 //
 
 
 typedef enum {

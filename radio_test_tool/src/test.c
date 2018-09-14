@@ -222,6 +222,7 @@ static int rt_miio_recv(io_inst_t* inst)
 
     int brf, brs, fcc;
     int id = -1;
+    char mac_str[32] = {0};
 
 
     rt_dev_t* dev = inst->priv;
@@ -303,7 +304,10 @@ static int rt_miio_recv(io_inst_t* inst)
 
         if (valid_body) {
             if (id == dev->id_test_exit || strstr(body, "miio_test_exit_ok")) {
-            message_r("recv miio_test_exit_ok >>>>>\n");
+                snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
+                dev->mac[0], dev->mac[1], dev->mac[2],
+                dev->mac[3], dev->mac[4], dev->mac[5]);
+            message_r("recv miio_test_exit_ok >>>>> mac:%s\n", mac_str);
             del_timer(&(dev->tmr));
             message_r("del dev-tmr ok >>>>>\n");
 #if DONUT_SUPPORT
@@ -606,7 +610,7 @@ static void rt_dev_tmr_func(int tid, void* data)
         downleoad_audio_test_results(dev);
 #endif
         if (dev->clnt_interested) {
-        if (dev->test_result == RTT_PRE_FAIL) {
+            if (dev->test_result == RTT_PRE_FAIL) {
                 send_ctrl_dev_response(dev, RT_CMD_FAIL_DEV);
                 dev->test_result = RTT_FAIL;
             } else {
@@ -617,8 +621,10 @@ static void rt_dev_tmr_func(int tid, void* data)
 #if !BEACON_SUPPORT
         stop_hostapd_if_all_test_done();
 #endif
+    }else if(tid == RT_DEV_TMR_DELAY_BEACON_SEND_ALL){
+         message_r("RT_DEV_TMR_DELAY_BEACON_SEND_ALL timeout try stop_hostapd_if_all_test_done >>>>>\n\n");
+         stop_hostapd_if_all_test_done();
     }
-
     return;
 
  fail_miio_dev:
@@ -845,8 +851,9 @@ void ctrl_dev3(char* dev_mac, ctrl_dev_cmd_t cmd, rt_client_t* clnt)
                 //else{
                 //    message_r("cmd = CTRL_DEV_CMD_ADD_BEACON not clnt_interested >>>>>\n\n");
                 //}
-                message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  stop_hostapd_if_all_test_done >>>>>\n\n");
-                stop_hostapd_if_all_test_done();
+                //message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  stop_hostapd_if_all_test_done >>>>>\n\n");
+                //stop_hostapd_if_all_test_done();
+                dev_start_tmr(dev, 50, RT_DEV_TMR_DELAY_BEACON_SEND_ALL, 0);
                 #endif
                 break;
             case CTRL_DEV_CMD_AUDIO_TEST:

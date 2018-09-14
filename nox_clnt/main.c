@@ -6,10 +6,13 @@
 
 #define RSSI_THRESH_AVG -50
 #define RSSI_THRESH_MIN -65
-#define PACKAGE_LOSS_THRESH 20
+#define PACKAGE_LOSS_THRESH 75
+#define MIN_PACKAGE 8/*minimum package received from device*/ 
 
 #define res(field) result->body.status[i].field
 
+
+char clnt_ver[] = "1.2";
 static rt_cmd_result_t final_res;
 static rt_cmd_result_t *result = &final_res;
 
@@ -165,10 +168,10 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
             //    pass = 0;
             //}
 
-            if (res(packet_recv) < 10) {
+            if (res(packet_recv) < MIN_PACKAGE) {
                 printf("error : %s 收到的数据包数量(=%d)太低\n", res(mac), res(packet_recv));
                 pass = 0;
-            } 
+            }
 
             else if ((100 * res(packet_recv)) / res(packet_send) < (100 - PACKAGE_LOSS_THRESH)) {
                 printf("error : %s 丢包率(%d/%d)太高\n", res(mac), res(packet_send)-res(packet_recv), res(packet_send));
@@ -226,6 +229,7 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
                strcpy(beacon_cmd.mac_dev, result->body.status[i].mac);
                strcpy(beacon_cmd.mac_beacon, beacon_mac);
                strcpy(beacon_cmd.key, beacon_key);
+               control_dev(hdl, &beacon_cmd, 3);
                control_dev(hdl, &beacon_cmd, 3);
            }
        }
@@ -375,6 +379,7 @@ static void control_dev(rtt_handle_t hdl, char* body, int result)
 
 int main(int argc, char** argv)
 {
+    printf("\n--------Tool client ver :v%s-----------\n\n\n", clnt_ver);
     rtt_handle_t hdl;
     int err;
     int c;
