@@ -22,3 +22,9 @@
 2.server端收到蓝牙指令后，不立即停止wifi，启动一个5秒的定时器，5秒后停止。
 3.client update ver V1.2。
 4.server update ver V1.7。
+
+2018-12-13
+1.client增加了model测试功能,测试结果位于.../nox_clnt/model_test.log
+2.server读取设备状态时间由30s设置为20s
+3.client update ver V1.3
+4.server update ver V1.8

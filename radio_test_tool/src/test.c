@@ -78,7 +78,7 @@ char TOKEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF
 };
 
-#define TIME_SPACE_DURATION 60
+#define TIME_SPACE_DURATION 40
 #define TIME_REPEAT_SPACE_SCANIP 15//默认1.5秒再次去搜索一次 
 
 static radio_test_t   rt_cb = {

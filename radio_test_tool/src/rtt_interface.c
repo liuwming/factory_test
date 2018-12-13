@@ -174,7 +174,7 @@ int rtt_recv(rtt_handle_t hdl, rt_cmd_result_t* result, rt_cmd_type_t type)
         else 
             rc = recvfrom(con->fd, result, sizeof(rt_cmd_result_t),
                           0, NULL, NULL);
-        printf("rtt_recv type, expecting %d, received = %d\r\n ", type, result->type);
+        //printf("rtt_recv type, expecting %d, received = %d\r\n ", type, result->type);
     } while ((rc < 0 && errno == EINTR) || 
              (rc > 0 && type != RT_CMD_MAX && result->type != type));
 

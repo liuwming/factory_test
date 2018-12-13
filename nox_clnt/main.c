@@ -12,12 +12,22 @@
 #define res(field) result->body.status[i].field
 
 
-char clnt_ver[] = "1.2";
+
+char clnt_ver[] = "1.3";
 static rt_cmd_result_t final_res;
 static rt_cmd_result_t *result = &final_res;
 
 static char *log_file = "rssi_test.log";
+static char *log_file_model_test = "model_test.log";
 static void control_dev(rtt_handle_t, char*, int);
+
+
+enum TEST_TYPE{
+    TEST_TYPE_WIFI = 1,
+    TEST_TYPE_MODEL = 2
+};
+
+int g_test_type = TEST_TYPE_WIFI;
 
 int valid_mac(char * s)
 {
@@ -45,6 +55,22 @@ int valid_mac(char * s)
     return 1;
 }
 
+int valid_model(char * s)
+{
+    int len = strlen(s);
+    if (len < 20) {
+        printf("[长度错误] 当前model:%s 长度:%d \n", s, len);
+        return 0;
+    }
+
+    int i;
+    for (i = 0; i < 17; i++) {
+        s[i] = tolower(s[i]);
+    }
+
+    return 1;
+}
+
 int valid_key(char * s)
 {
     int i;
@@ -67,7 +93,23 @@ int valid_key(char * s)
 
 static char beacon_mac[32];
 static char beacon_key[32];
+static char target_model[32];
+
+typedef struct{
+    char name[50];
+    char model[32];
+}prod_name_model;
+
+
+prod_name_model data_base_model[] = 
+{
+    {"易来 皑月LED吸顶灯 480","yilai.light.ceiling1"},
+    {"易来 荷枫LED吸顶灯 430","yilai.light.ceiling2"},
+    {"易来 荷枫LED吸顶灯 Pro","yilai.light.ceiling3"},
+};
+
 #define beacon_info_fn ".beacon_info"
+#define model_info_fn "target_model_config"
 
 int set_beacon()
 {
@@ -93,6 +135,32 @@ int set_beacon()
     sprintf(cmd, "echo %s > "beacon_info_fn, beacon_mac);
     system(cmd);
     sprintf(cmd, "echo %s >> "beacon_info_fn, beacon_key);
+    system(cmd);
+
+    return 0;
+}
+
+int set_target_model()
+{
+    char cmd[128];
+    char buf[32];
+
+    printf("\n请输入目标产品model号,格式为：yilai.light.ceilingxx\n");
+    printf("参考当前已有产品对应表\n");
+    printf("======================================================\n\n");
+    for(int i = 0; i < sizeof(data_base_model)/sizeof(prod_name_model); i++){
+        printf("%35s %30s\n",data_base_model[i].name, data_base_model[i].model);
+    }
+    printf("\n======================================================\n\n");
+
+    scanf("%s", buf);
+    if (!valid_model(buf)) {
+        printf("model格式不正确\n");
+        return -1;
+    }
+    strcpy(target_model, buf);
+
+    sprintf(cmd, "echo %s > "model_info_fn, target_model);
     system(cmd);
 
     return 0;
@@ -124,6 +192,34 @@ int load_beacon()
     strcpy(beacon_key, buf);
 
     printf("发现遥控器配置信息，MAC地址-%s, key-%s\n", beacon_mac, beacon_key);
+
+    fclose(fp);
+    return 0;
+
+err:
+    fclose(fp);
+    return -1;
+}
+
+int load_target_model()
+{
+    FILE *fp;
+    char buf[64];
+
+    fp = fopen(model_info_fn, "r");
+    if (!fp) {
+        printf("未发现目标model配置文件\n");
+        return -1;
+    }
+
+    fscanf(fp, "%s", buf);
+    if (!valid_model(buf)) {
+        printf("目标model配置文件格式不正确 %s\n", buf);
+        goto err;
+    }
+    strcpy(target_model, buf);
+
+    printf("发现遥目标model配置信息，%s\n", target_model);
 
     fclose(fp);
     return 0;
@@ -230,12 +326,99 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
                strcpy(beacon_cmd.mac_beacon, beacon_mac);
                strcpy(beacon_cmd.key, beacon_key);
                control_dev(hdl, &beacon_cmd, 3);
+               strcpy(beacon_cmd.mac_beacon, "F8:24:41:D0:7F:27");//第二个
+               control_dev(hdl, &beacon_cmd, 3);
+               strcpy(beacon_cmd.mac_beacon, "F8:24:41:D0:7F:28");//第三个
                control_dev(hdl, &beacon_cmd, 3);
            }
        }
    }
 }
 
+static void print_test_modle_status(rtt_handle_t hdl, rt_cmd_result_t* result)
+{
+    int i;
+    int l;
+    char buf[4096];
+    int pass;
+    int add_beacon = 0;
+
+    int passed_dev[MAX_TEST_DEV];
+    bzero(passed_dev, MAX_TEST_DEV * sizeof(int));
+
+    memset(buf, 0, sizeof buf);
+
+
+    switch (result->type){
+        case RT_CMD_STATUS:
+            l = sprintf(buf, "\n\n--------%s--------\n" , result->type == RT_CMD_STATUS ?
+                "status" : "result");
+            break;
+        case RT_CMD_RESULT:
+            l = sprintf(buf, "\n\n共测试[%d]台设备,测试结果：\n",(int)result->dev_count);
+            l += sprintf(buf + l, "%s\n\n", "----------------------------------------------------------------------------------");
+            break;
+    }
+    //l += sprintf(buf + l, "-model-firmware_ver-brs-brf-avg_rssi-min_rssi-max_rssi-packet_send-packet_recv\n");
+    for (i = 0; i < (int)result->dev_count; i++) {
+        //l += sprintf(buf + l, "+Device: Status[%s] MAC[%s] IP[%s]\n", res(state), res(mac), res(ip));
+        if (result->type == RT_CMD_RESULT) {
+            pass = 0;
+
+            if(res(model) != NULL && strcmp(target_model, res(model)) == 0){
+               pass = 1; 
+            }
+
+            if (pass) {
+                control_dev(hdl, result->body.status[i].mac, 1);
+                l += sprintf(buf + l, "[%s]------MAC[%s] model[%s]\n", "成功",res(mac),res(model));
+                passed_dev[i] = 1;
+            }
+            else {
+                control_dev(hdl, result->body.status[i].mac, 1);
+                l += sprintf(buf + l, "[%s]------MAC[%s] model[%s] 设备状态[%s] \n", "失败", res(mac), res(model), res(state));
+                passed_dev[i] = 0;
+            }
+        }
+        else{
+            if (strcmp(res(state), STATE_DEV_CONN) == 0) {
+                l += sprintf(buf + l, "\t%s", res(model));
+                l += sprintf(buf + l, "\t%s", res(fw_ver));
+                l += sprintf(buf + l, "\t%d", res(brs));
+                l += sprintf(buf + l, "\t%d", res(brf));
+                l += sprintf(buf + l, "\t%d", res(avg_rssi));
+                l += sprintf(buf + l, "\t%d", res(min_rssi));
+                l += sprintf(buf + l, "\t%d", res(max_rssi));
+                l += sprintf(buf + l, "\t%d", res(packet_send));
+                l += sprintf(buf + l, "\t%d", res(packet_recv));
+            }
+            l += sprintf(buf + l, "\n");
+        }
+    }
+    switch (result->type){
+        case RT_CMD_STATUS:
+            break;
+        case RT_CMD_RESULT:
+            l += sprintf(buf + l, "\n%s\n", "----------------------------------------------------------------------------------");
+            break;
+    }
+
+    printf("%s\n\n", buf);
+
+
+#ifdef LOG_RESULT
+    if (result->type == RT_CMD_RESULT) {
+        FILE *fp;
+        fp = fopen(log_file_model_test, "a");
+        if (!fp)
+            printf("Error: log file open failure, will lose some test results\n");
+
+        fwrite(buf, strlen(buf), 1, fp);
+        fclose(fp);
+    }
+#endif
+
+}
 static void test_stop(rtt_handle_t hdl)
 {
     rt_cmd_result_t res;
@@ -287,12 +470,29 @@ static void run_test(rtt_handle_t hdl)
         rc = rtt_recv(hdl, &res, RT_CMD_MAX); /* receive all messages from daemon */
         if (rc <= 0) break;
         if (res.type == RT_CMD_STATUS) {
-            printf("Test status update.\n");
-            print_test_status(hdl, &res);
+            switch (g_test_type){
+                case TEST_TYPE_WIFI:
+                    print_test_status(hdl, &res);
+                    break;
+                case TEST_TYPE_MODEL:
+                    print_test_modle_status(hdl,&res);
+                    break;
+                default:
+                    break;
+            }
         }
         if (res.type == RT_CMD_RESULT) {
             printf("Test Result.\n");
-            print_test_status(hdl, &res);
+            switch (g_test_type){
+                case TEST_TYPE_WIFI:
+                    print_test_status(hdl, &res);
+                    break;
+                case TEST_TYPE_MODEL:
+                    print_test_modle_status(hdl,&res);
+                    break;
+                default:
+                    break;
+            }
             memcpy(&final_res, &res, sizeof(res));
             break;
         }
@@ -385,9 +585,11 @@ int main(int argc, char** argv)
     int c;
 
     if (load_beacon()) {
-        printf("未发现遥控器信息，请手动输入\n");
-        while (set_beacon()) {
-        }
+        printf("未发现遥控器信息，如wifi测试需手动输入\n");
+    }
+
+    if (load_target_model()) {
+        printf("未发现model信息，如model测试需手动输入\n");
     }
 
     setbuf(stdout, NULL);
@@ -400,23 +602,31 @@ int main(int argc, char** argv)
 
     do {
         printf("支持的操作：\n");
-        printf("  1： 执行测试\n");
+        printf("  1： 执行wifi测试\n");
         printf("  2： 设置遥控器\n");
+        printf("  3： 设置目标产品model\n");
+        printf("  4： 执行model测试\n");
         printf("  q： 退出程序\n");
-        printf("请输入选项（1/2/q）: ");
+        printf("请输入选项（1/2/3/4/q）: \n");
         c = getchar();
 
         switch(c) {
         case '1':
+            g_test_type = TEST_TYPE_WIFI; 
             run_test(hdl);
-            break;
-
-        case '3':
-            //run_ota(hdl);
             break;
 
         case '2':
             set_beacon();
+            break;
+
+        case '3':
+            set_target_model();
+            break;
+
+        case '4':
+            g_test_type = TEST_TYPE_MODEL; 
+            run_test(hdl);
             break;
 
         default:
