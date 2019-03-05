@@ -621,7 +621,7 @@ static void rt_dev_tmr_func(int tid, void* data)
 #if !BEACON_SUPPORT
         stop_hostapd_if_all_test_done();
 #endif
-    }else if(tid == RT_DEV_TMR_DELAY_BEACON_SEND_ALL){
+    } else if(tid == RT_DEV_TMR_DELAY_BEACON_SEND_ALL){
          message_r("RT_DEV_TMR_DELAY_BEACON_SEND_ALL timeout try stop_hostapd_if_all_test_done >>>>>\n\n");
          stop_hostapd_if_all_test_done();
     }

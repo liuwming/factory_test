@@ -8,12 +8,14 @@
 #define RSSI_THRESH_MIN -65
 #define PACKAGE_LOSS_THRESH 75
 #define MIN_PACKAGE 8/*minimum package received from device*/ 
+#define EXIT_FACTORY_WIFI_PASS 0
+
 
 #define res(field) result->body.status[i].field
 
 
 
-char clnt_ver[] = "1.3";
+char clnt_ver[] = "1.4";
 static rt_cmd_result_t final_res;
 static rt_cmd_result_t *result = &final_res;
 
@@ -276,7 +278,11 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
 
             if (pass) {
                 printf("测试通过\n");
+#if EXIT_FACTORY_WIFI_PASS
                 control_dev(hdl, result->body.status[i].mac, 0);
+#else
+                printf("测试通过后不退工厂模式");
+#endif
                 l += sprintf(buf + l, "测试结果[%s],设备状态[%s] MAC[%s] IP[%s]\n", "成功", res(state), res(mac), res(ip));
                 passed_dev[i] = 1;
                 add_beacon = 1;
@@ -326,10 +332,10 @@ static void print_test_status(rtt_handle_t hdl, rt_cmd_result_t* result)
                strcpy(beacon_cmd.mac_beacon, beacon_mac);
                strcpy(beacon_cmd.key, beacon_key);
                control_dev(hdl, &beacon_cmd, 3);
-               strcpy(beacon_cmd.mac_beacon, "F8:24:41:D0:7F:27");//第二个
-               control_dev(hdl, &beacon_cmd, 3);
-               strcpy(beacon_cmd.mac_beacon, "F8:24:41:D0:7F:28");//第三个
-               control_dev(hdl, &beacon_cmd, 3);
+               //strcpy(beacon_cmd.mac_beacon, "F8:24:41:D0:7F:27");//第二个
+               //control_dev(hdl, &beacon_cmd, 3);
+               //strcpy(beacon_cmd.mac_beacon, "F8:24:41:D0:7F:28");//第三个
+               //control_dev(hdl, &beacon_cmd, 3);
            }
        }
    }
