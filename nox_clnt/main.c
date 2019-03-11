@@ -8,14 +8,14 @@
 #define RSSI_THRESH_MIN -65
 #define PACKAGE_LOSS_THRESH 75
 #define MIN_PACKAGE 8/*minimum package received from device*/ 
-#define EXIT_FACTORY_WIFI_PASS 0
+#define EXIT_FACTORY_WIFI_PASS 1
 
 
 #define res(field) result->body.status[i].field
 
 
 
-char clnt_ver[] = "1.4";
+char clnt_ver[] = "1.5";
 static rt_cmd_result_t final_res;
 static rt_cmd_result_t *result = &final_res;
 
@@ -566,21 +566,62 @@ static void control_dev(rtt_handle_t hdl, char* body, int result)
     } else {
         cmd.type = RT_CMD_ADD_BEACON;
         memcpy(&cmd.body, body, sizeof(beacon_cmd_param_t));
-        printf("%d: add beacon %s-%s for %s\r\n", cmd.type, cmd.body.beacon.mac_beacon, cmd.body.beacon.key, cmd.body.beacon.mac_dev);
-        printf("send add beacon command\r\n");
+        //printf("%d: add beacon %s-%s for %s\r\n", cmd.type, cmd.body.beacon.mac_beacon, cmd.body.beacon.key, cmd.body.beacon.mac_dev);
+        //printf("send add beacon command\r\n");
         rtt_send(hdl, &cmd);
-        printf("recv response...\r\n");
+        //printf("recv response...\r\n");
         rc = rtt_recv(hdl, &res, RT_CMD_ADD_BEACON);
     }
 
-    if (rc < 0 || (rc > 0 && res.ret_code != RT_ERR_OK)) {
-        printf("Failed to exe command %d.\n", res.ret_code);
-        return;
-    } else {
-        printf("command execute successfully.\n");
-    }
+    //if (rc < 0 || (rc > 0 && res.ret_code != RT_ERR_OK)) {
+    //    printf("Failed to exe command %d.\n", res.ret_code);
+    //    return;
+    //} else {
+    //    printf("command execute successfully.\n");
+    //}
+
+    parse_result_contrl_dev(&res, &cmd, rc);
 }
 
+
+char cmd_name[][50] =
+{
+    {"启动"},//0
+    {"结束"},
+    {"状态"},
+    {"结果"},
+    {"设置参数"},
+    {"获取参数"},//5
+    {"真退工厂"},
+    {"假退工厂"},
+    {"升级"},
+    {""},
+    {""},//10
+    {""},
+    {"添加遥控器"},
+    {""},
+    {""},
+    {""},//15
+    {""},
+    {""}
+};
+
+void parse_result_contrl_dev(rt_cmd_result_t * res, rt_cmd_t * cmd, int rc)
+{
+    if (rc < 0 || (rc > 0 && res->ret_code != RT_ERR_OK)) {
+        printf("\nMAC[%s]执行指令[%s]失败，错误码：%d.\n",cmd->body.mac, cmd_name[cmd->type], res->ret_code);
+        if(cmd->type == RT_CMD_ADD_BEACON){
+            printf("遥控器[%s-%s]\r\n\n", cmd->body.beacon.mac_beacon, cmd->body.beacon.key);
+        }
+        return;
+    } else {
+        printf("\nMAC[%s]执行指令[%s]成功.\n", cmd->body.mac, cmd_name[cmd->type]);
+        if(cmd->type == RT_CMD_ADD_BEACON){
+            printf("遥控器[%s-%s]\r\n\n", cmd->body.beacon.mac_beacon, cmd->body.beacon.key);
+        }
+    }
+
+}
 
 
 int main(int argc, char** argv)

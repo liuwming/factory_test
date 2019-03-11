@@ -70,13 +70,14 @@ extern char universal_beacon_key[];
 #define RT_TMR_DURATION      0
 #define RT_TMR_SAMPLE        1
 #define RT_TMR_AUDIO_TEST    2
+#define RT_TMR_REPEAT_SEND   3
+#define RT_TMR_WAIT_SEND_ALL 5 //tmr id: waiting for miio_test_exit and miIO.bleEvtRuleAdd ack timeout
 
 #define RT_DEV_TMR_SCANIP    0
 #define RT_DEV_TMR_HANDSHAKE 1
 #define RT_DEV_TMR_PROBE     2
 #define RT_DEV_TMR_SENDMSG   3
 #define RT_DEV_TMR_TEST_EXIT_OK 4 //waiting for miio_test_exit_ok timeout
-#define RT_DEV_TMR_DELAY_BEACON_SEND_ALL 5 //
 
 
 typedef enum {
@@ -111,6 +112,11 @@ typedef enum {
     RTT_PRE_FAIL,
 } test_result_t;
 
+typedef struct {
+    char beacon_param[10][128];//ble ctrl data,max 10
+    char beacon_send_id[10];//send pkg id
+    char beacon_confirmed[10];// if the pkg was confirmed this byte will be set to 1;
+} ble_ctrls_data_t;
 /*
  * wifi/miio devices under test
  */
@@ -147,6 +153,9 @@ typedef struct rt_dev {
     io_inst_t           io;
     int                 test_result; // test_result_t
     rt_client_t         *clnt_interested; // the client to send the confirmation to
+#if BEACON_SUPPORT
+    ble_ctrls_data_t  beacon_data;
+#endif 
 #if DONUT_SUPPORT
     int                 audio_test_result; // audio_test_result_t
     int                 ble_start_sent;
@@ -157,6 +166,7 @@ typedef struct rt_dev {
     int                 fcc;
 #endif
     int                 id_test_exit;
+    int                 test_exit_confirmed;
 } rt_dev_t;
 
 /*
@@ -166,6 +176,8 @@ typedef struct radio_test {
     rt_state_t   state;
     tmr_t        tmr_sample;
     tmr_t        tmr_duration;
+    tmr_t        tmr_repeat_send;//used for repeat send miio_test_exit add add ble ctrl cmd
+    tmr_t        tmr_wait_send_all;//tmr: waiting for miio_test_exit and miIO.bleEvtRuleAdd ack timeout
 #if DONUT_SUPPORT
     tmr_t        tmr_audio_test;
 #endif

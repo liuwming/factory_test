@@ -32,3 +32,8 @@
 2019-03-04
 1.client 测试成功后不发送退工厂指令.
 2.client update ver V1.4
+
+2019-03-11
+1.新增重发机制。
+2.client update ver V1.5
+3.server update ver V1.9

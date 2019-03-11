@@ -136,26 +136,38 @@ int start_test()
 static void rt_tmr_func(int tid, void* data)
 {
     /* time to stop this round of test and report result */
-    if (tid == RT_TMR_DURATION) {
-        message_r("RT_TMR_DURATION timeout stop_test >>>>>\n\n");
+    switch (tid){
+        case RT_TMR_DURATION:
+            message_r("RT_TMR_DURATION timeout stop_test >>>>>\n\n");
 #if DONUT_SUPPORT
-        if (is_audio_test_pending()) {
-            del_timer(&rt_cb.tmr_duration);
-            rt_start_tmr(tmr_duration, 1, RT_TMR_DURATION, 0);
-            return;
-        }
+            if (is_audio_test_pending()) {
+                del_timer(&rt_cb.tmr_duration);
+                rt_start_tmr(tmr_duration, 1, RT_TMR_DURATION, 0);
+                return;
+            }
 #endif
-        report_status(NULL, RT_CMD_RESULT);
-        stop_test();
-    } else if (tid == RT_TMR_SAMPLE) {
-        message_r("RT_TMR_SAMPLE timeout report_status >>>>>\n\n");
-        report_status(NULL, RT_CMD_STATUS);
+            report_status(NULL, RT_CMD_RESULT);
+            stop_test();
+            rt_start_tmr(tmr_repeat_send, 1.5, RT_TMR_REPEAT_SEND, 1);
+            rt_start_tmr(tmr_wait_send_all, 12, RT_TMR_WAIT_SEND_ALL, 0);//12s, 12/1.5=8
+            break;
+        case RT_TMR_SAMPLE:
+            //message_r("RT_TMR_SAMPLE timeout report_status >>>>>\n\n");
+            report_status(NULL, RT_CMD_STATUS);
+            break;
 #if DONUT_SUPPORT
-    } else if (tid == RT_TMR_AUDIO_TEST) {
-        audio_test_tick_cb();
+        case RT_TMR_AUDIO_TEST:
+            audio_test_tick_cb();
+            break;
 #endif
-    } else {
-        ;
+        case RT_TMR_REPEAT_SEND:
+            repeat_send_exit_ble();  
+            break;
+        case RT_TMR_WAIT_SEND_ALL:
+            stop_hostapd_if_all_test_done();
+            break;
+        default:
+            break;
     }
 }
 
@@ -205,8 +217,23 @@ static char* parse_miio_rsp(rt_dev_t* dev, char* buf, int len)
     info = (char*)calloc(info_size*20, sizeof(char));
     info_len = decrypt(buf, len, dev->md5, info, info_size);
 
-    RT_ERR("Info len: %d, content: %s\n", info_len, info);
+    RT_ERR("Recv dev data mac:%d, content:%s\n", dev->mac[5], info);
     return info;
+}
+
+int check_beacon_id_confirm(rt_dev_t* dev, int pkg_id)
+{
+    int num = 0;
+
+    for(int i=0; i<sizeof(dev->beacon_data.beacon_param)/sizeof(dev->beacon_data.beacon_param[0]); i++){
+       if(pkg_id == dev->beacon_data.beacon_send_id[i]){
+            message_r("recv confirm ack for beacon serial:%d id:%d\n\n",i, pkg_id);
+            dev->beacon_data.beacon_confirmed[i] = 1;
+            //dev->test_result = RTT_FAIL;
+            num ++;
+        }
+    }
+    return num;
 }
 
 static int rt_miio_recv(io_inst_t* inst)
@@ -303,7 +330,12 @@ static int rt_miio_recv(io_inst_t* inst)
         }
 
         if (valid_body) {
+#if BEACON_SUPPORT
+            check_beacon_id_confirm(dev, id);
+#endif
+
             if (id == dev->id_test_exit || strstr(body, "miio_test_exit_ok")) {
+                dev->test_exit_confirmed = 1;
                 snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
                 dev->mac[0], dev->mac[1], dev->mac[2],
                 dev->mac[3], dev->mac[4], dev->mac[5]);
@@ -387,7 +419,6 @@ static int rt_miio_recv(io_inst_t* inst)
     default:
         break;
     }
-
     return 0;
 }
 
@@ -466,12 +497,9 @@ static int dev_rpc_send(rt_dev_t* dev, char* method, char* param)
              METHOD, QT, method, QT,
              PARAMS, param);
 
-    message_r("in dev_rpc_send ip[%s] data[%s] >>>>>\n", dev->ip, rpc_buf);
+    //message_r("in dev_rpc_send ip[%s] data[%s] \n", dev->ip, rpc_buf);
     if (strstr(rpc_buf, "miio_test_exit")) {//avoid to loss miio_test_exit
         message_r("in dev_rpc_send find miio_test_exit >>>>>\n");
-        dev_raw_send(dev, rpc_buf);
-        usleep(300*1000);
-        message_r("in dev_rpc_send send miio_test_exit twice>>>>>\n");
         return dev_raw_send(dev, rpc_buf);
     }
     return dev_raw_send(dev, rpc_buf);
@@ -551,7 +579,7 @@ static void rt_dev_tmr_func(int tid, void* data)
             dev_start_tmr(dev, TIME_REPEAT_SPACE_SCANIP, RT_DEV_TMR_SCANIP, 0);
         }
     } else if (tid == RT_DEV_TMR_SENDMSG) {
-        message_r("RT_DEV_TMR_SENDMSG timeout dev_rpc_send [get_prop] >>>>>\n");
+        //message_r("RT_DEV_TMR_SENDMSG timeout dev_rpc_send [get_prop] >>>>>\n");
         dev_rpc_send(dev, "get_prop", "[\"fw_ver\"]");
         dev->packet_send ++;
         if (dev->brs == -1 || dev->brf == -1) {
@@ -604,27 +632,29 @@ static void rt_dev_tmr_func(int tid, void* data)
         }
         dev_rpc_send(dev, "miIO.info", "[]");
         dev_start_tmr(dev, 100, RT_DEV_TMR_PROBE, 0);
-    } else if (tid == RT_DEV_TMR_TEST_EXIT_OK) {
-        message_r("RT_DEV_TMR_TEST_EXIT_OK timeout waiting for test_exit_ok timeout >>>>>\n");
-#if DONUT_SUPPORT
-        downleoad_audio_test_results(dev);
-#endif
-        if (dev->clnt_interested) {
-            if (dev->test_result == RTT_PRE_FAIL) {
-                send_ctrl_dev_response(dev, RT_CMD_FAIL_DEV);
-                dev->test_result = RTT_FAIL;
-            } else {
-                send_ctrl_dev_response(dev, RT_CMD_CTRL_DEV);
-                dev->test_result = RTT_PASS;
-            }
-        }
-#if !BEACON_SUPPORT
-        stop_hostapd_if_all_test_done();
-#endif
-    } else if(tid == RT_DEV_TMR_DELAY_BEACON_SEND_ALL){
-         message_r("RT_DEV_TMR_DELAY_BEACON_SEND_ALL timeout try stop_hostapd_if_all_test_done >>>>>\n\n");
-         stop_hostapd_if_all_test_done();
-    }
+    } 
+//    else if (tid == RT_DEV_TMR_TEST_EXIT_OK) {
+//        message_r("RT_DEV_TMR_TEST_EXIT_OK timeout waiting for test_exit_ok timeout >>>>>\n");
+//#if DONUT_SUPPORT
+//        downleoad_audio_test_results(dev);
+//#endif
+//        if (dev->clnt_interested) {
+//            if (dev->test_result == RTT_PRE_FAIL) {
+//                send_ctrl_dev_response(dev, RT_CMD_FAIL_DEV);
+//                dev->test_result = RTT_FAIL;
+//            } else {
+//                send_ctrl_dev_response(dev, RT_CMD_CTRL_DEV);
+//                dev->test_result = RTT_PASS;
+//            }
+//        }
+//#if !BEACON_SUPPORT
+//        stop_hostapd_if_all_test_done();
+//#endif
+//    }
+    //else if(tid == RT_DEV_TMR_DELAY_BEACON_SEND_ALL){
+    //     message_r("RT_DEV_TMR_DELAY_BEACON_SEND_ALL timeout try stop_hostapd_if_all_test_done >>>>>\n\n");
+    //     stop_hostapd_if_all_test_done();
+    //}
     return;
 
  fail_miio_dev:
@@ -666,6 +696,7 @@ int clear_test()
     list_node_t *node, *tmp;
     rt_dev_t* dev;
 
+    del_timer(&rt_cb.tmr_repeat_send);
     /* gather information and clear */
     list_for_del(&(rt_cb.dev_list), node, tmp) {
         list_del(node);
@@ -732,6 +763,9 @@ static rt_dev_t* rt_add_dev(unsigned char* mac)
     dev_start_tmr(dev, TIME_REPEAT_SPACE_SCANIP, RT_DEV_TMR_SCANIP, 0); /* scan for IP every 3 secs */
     dev->brs = -1;
     dev->brf = -1;
+#if BEACON_SUPPORT
+    memset(&dev->beacon_data, 0, sizeof(ble_ctrls_data_t));
+#endif
     return dev;
 }
 
@@ -751,22 +785,25 @@ static void rt_update_dev_rssi(rt_dev_t* dev, int power)
 // at this time, all dev that have not been identified will be ignored
 void stop_hostapd_if_all_test_done()
 {
+    //int all_pkg_confirmed = 0;
+
     message_r("stop_hostapd_if_all_test_done \n\n");
     list_node_t* node;
     rt_dev_t* dev;
     list_for(&(rt_cb.dev_list), node) {
         dev = object_of(rt_dev_t, self, node);
-        if (dev->rt_dev_state == RT_DEV_IDENTIFIED &&
-            dev->test_result != RTT_PASS &&
-            dev->test_result != RTT_FAIL) {
-            message_r("stop_hostapd_if_all_test_done not all test is done return\n\n");
-            // if any identified device has not received test_exit command, then wait
-            return;
-        }
+        //if (dev->rt_dev_state == RT_DEV_IDENTIFIED &&
+        //    dev->test_result != RTT_PASS &&
+        //    dev->test_result != RTT_FAIL) {
+        //    message_r("stop_hostapd_if_all_test_done not all test is done return\n\n");
+        //    // if any identified device has not received test_exit command, then wait
+        //    return;
+        //}
     }
 
     sleep(8);
 
+    del_timer(&rt_cb.tmr_repeat_send);
     int rc = rtt_exec("/etc/init.d/hostapd stop", 1);
     if (rc != 0)
     {
@@ -798,20 +835,21 @@ void ctrl_dev3(char* dev_mac, ctrl_dev_cmd_t cmd, rt_client_t* clnt)
             switch(cmd)
             {
             case CTRL_DEV_CMD_TEST_PASS:
-                message_r("cmd = CTRL_DEV_CMD_TEST_PASS dev_rpc_send [miio_test_exit0] >>>>>\n\n");
+                message_r("recv client cmd = CTRL_DEV_CMD_TEST_PASS \n\n");
                 dev->id_test_exit = dev_rpc_send(dev, "miio_test_exit", "[0]");
+                message_r("dev->id_test_exit:%d\n\n", dev->id_test_exit);
                 dev->test_result = RTT_PRE_PASS;
-                dev_start_tmr(dev, 50, RT_DEV_TMR_TEST_EXIT_OK, 0);
+                //dev_start_tmr(dev, 50, RT_DEV_TMR_TEST_EXIT_OK, 0);
                 #if !BEACON_SUPPORT
                     message_r("cmd = CTRL_DEV_CMD_TEST_PASS but not beacon_support >>>>>\n\n");
                     stop_hostapd_if_all_test_done();
                 #endif
                 break;
             case CTRL_DEV_CMD_TEST_FAIL:
-                message_r("cmd = CTRL_DEV_CMD_TEST_FAIL dev_rpc_send [miio_test_exit1] >>>>>\n\n");
+                message_r("recv client cmd = CTRL_DEV_CMD_TEST_FAIL\n\n");
                 dev->id_test_exit = dev_rpc_send(dev, "miio_test_exit", "[1]");
                 dev->test_result = RTT_PRE_FAIL;
-                dev_start_tmr(dev, 50, RT_DEV_TMR_TEST_EXIT_OK, 0);
+                //dev_start_tmr(dev, 50, RT_DEV_TMR_TEST_EXIT_OK, 0);
                 #if !BEACON_SUPPORT
                     message_r("cmd = CTRL_DEV_CMD_TEST_FAIL but not beacon_support >>>>>\n\n");
                     stop_hostapd_if_all_test_done();
@@ -833,28 +871,45 @@ void ctrl_dev3(char* dev_mac, ctrl_dev_cmd_t cmd, rt_client_t* clnt)
                 }
                 break;
             case CTRL_DEV_CMD_ADD_BEACON:
+            {
+
                 sprintf(cmd_param, "{\"mac\":\"%s\",\"pid\":69,\"eid\":4097,\"beaconKey\":\"%s\"}",
                         universal_beacon_mac, universal_beacon_key);
-                message_r("cmd = CTRL_DEV_CMD_ADD_BEACON dev_rpc_send [miIO.bleEvtRuleAdd] >>>>>\n\n");
-                dev_rpc_send(dev, "miIO.bleEvtRuleAdd", cmd_param);
+                message_r("recv client cmd = CTRL_DEV_CMD_ADD_BEACON\n\n");
+#if BEACON_SUPPORT
+                for(int i=0; i<sizeof(dev->beacon_data.beacon_param)/sizeof(dev->beacon_data.beacon_param[0]); i++){
+                    if(strlen(&dev->beacon_data.beacon_param[i][0]) > 10){
+                       continue; 
+                    }else{
+                        strncpy(&dev->beacon_data.beacon_param[i][0], cmd_param, sizeof(cmd_param));
+                        dev->beacon_data.beacon_send_id[i] = dev_rpc_send(dev, "miIO.bleEvtRuleAdd", &dev->beacon_data.beacon_param[i][0]);
+                        break;
+                    }
+                }
+#endif
+                //dev_rpc_send(dev, "miIO.bleEvtRuleAdd", cmd_param);
                 #if BEACON_SUPPORT
                 //if (dev->clnt_interested) {
                     //message_r("cmd = CTRL_DEV_CMD_ADD_BEACON clnt_interested >>>>>\n\n");
-                    if (dev->test_result == RTT_PRE_FAIL) {
-                        message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  test_result = RTT_PRE_FAIL >>>>>\n\n");
-                        dev->test_result = RTT_FAIL;
-                    } else {
-                        message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  test_result = RTT_PRE_PASS >>>>>\n\n");
-                        dev->test_result = RTT_PASS;
-                    }
+
+                //    if (dev->test_result == RTT_PRE_FAIL) {
+                //        message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  test_result = RTT_PRE_FAIL >>>>>\n\n");
+                //        dev->test_result = RTT_FAIL;
+                //    } else {
+                //        message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  test_result = RTT_PRE_PASS >>>>>\n\n");
+                //        dev->test_result = RTT_PASS;
+                //    }
+
                 //}
                 //else{
                 //    message_r("cmd = CTRL_DEV_CMD_ADD_BEACON not clnt_interested >>>>>\n\n");
                 //}
                 //message_r("cmd = CTRL_DEV_CMD_ADD_BEACON  stop_hostapd_if_all_test_done >>>>>\n\n");
                 //stop_hostapd_if_all_test_done();
-                dev_start_tmr(dev, 50, RT_DEV_TMR_DELAY_BEACON_SEND_ALL, 0);
+
+                //dev_start_tmr(dev, 50, RT_DEV_TMR_DELAY_BEACON_SEND_ALL, 0);
                 #endif
+            }
                 break;
             case CTRL_DEV_CMD_AUDIO_TEST:
                 dev_rpc_send(dev, "start_audio_test", "[80]");
@@ -1028,6 +1083,68 @@ void report_status(rt_client_t* clnt, int type)
     else
         clnt_broadcast_res(&result);
 }
+
+
+void repeat_sent_beacon(rt_dev_t* dev)
+{
+    for(int i = 0; i < sizeof(dev->beacon_data.beacon_param)/sizeof(&dev->beacon_data.beacon_param[0]); i++){
+        if(strlen(&dev->beacon_data.beacon_param[i][0]) > 10){//means has beacon key
+            if(!dev->beacon_data.beacon_confirmed[i]){
+                dev->beacon_data.beacon_send_id[i] = dev_rpc_send(dev, "miIO.bleEvtRuleAdd", &dev->beacon_data.beacon_param[i][0]);
+                message_r("repeat send beacon mac[5]:%d, serial:%d id:%d\n", dev->mac[5], i, dev->beacon_data.beacon_send_id[i]);
+            }
+        }else{
+            break;//once find empty data then return;
+        }
+    }
+}
+
+
+void repeat_send_exit_ble()
+{
+    list_node_t* node;
+    rt_dev_t* dev;
+    char mac[32] = {0};
+    
+    list_for(&(rt_cb.dev_list), node) {
+        dev = object_of(rt_dev_t, self, node);
+
+        snprintf(mac, sizeof(mac), "%02x:%02x:%02x:%02x:%02x:%02x",
+                 dev->mac[0], dev->mac[1], dev->mac[2],
+                 dev->mac[3], dev->mac[4], dev->mac[5]);
+
+        switch (dev->test_result)
+        {
+            case RTT_PRE_FAIL:
+                if(!dev->test_exit_confirmed){
+                    dev->id_test_exit = dev_rpc_send(dev, "miio_test_exit", "[1]");
+                    message_r("[%s] resend miio_test_exit [1] mac[5]:%d, id:%d\n\n", __func__, dev->mac[5], dev->id_test_exit);
+                }
+#if BEACON_SUPPORT
+                repeat_sent_beacon(dev);
+#endif
+                break;
+            case RTT_PRE_PASS:
+                if(!dev->test_exit_confirmed){
+                    dev->id_test_exit = dev_rpc_send(dev, "miio_test_exit", "[0]");
+                    message_r("[%s] resend miio_test_exit [0] mac[5]:%d, id:%d\n\n", __func__, dev->mac[5], dev->id_test_exit);
+                }
+#if BEACON_SUPPORT
+                repeat_sent_beacon(dev);
+#endif
+                break;
+            case RTT_FAIL:
+            case RTT_PASS:
+            {
+                ;
+            }
+                break;
+            default :
+                break;
+        }
+    }
+}
+
 
 #if DONUT_SUPPORT
 
