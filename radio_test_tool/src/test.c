@@ -80,6 +80,9 @@ char TOKEN[] = {
 
 #define TIME_SPACE_DURATION 40
 #define TIME_REPEAT_SPACE_SCANIP 15//默认1.5秒再次去搜索一次 
+#define TIME_INTERVAL_WAIT_SEND_ALL 18//18s
+#define TIME_INTERVAL_REPEAT_SEND 1.2//1.2s
+
 
 static radio_test_t   rt_cb = {
     .state = RT_IDLE,
@@ -148,8 +151,9 @@ static void rt_tmr_func(int tid, void* data)
 #endif
             report_status(NULL, RT_CMD_RESULT);
             stop_test();
-            rt_start_tmr(tmr_repeat_send, 1.5, RT_TMR_REPEAT_SEND, 1);
-            rt_start_tmr(tmr_wait_send_all, 12, RT_TMR_WAIT_SEND_ALL, 0);//12s, 12/1.5=8
+            rt_start_tmr(tmr_repeat_send, TIME_INTERVAL_REPEAT_SEND, RT_TMR_REPEAT_SEND, 1);
+            //TIME_INTERVAL_WAIT_SEND_ALL/TIME_INTERVAL_REPEAT_SEND = number of times
+            rt_start_tmr(tmr_wait_send_all, TIME_INTERVAL_WAIT_SEND_ALL, RT_TMR_WAIT_SEND_ALL, 0);//12s, 12/1.5=8
             break;
         case RT_TMR_SAMPLE:
             //message_r("RT_TMR_SAMPLE timeout report_status >>>>>\n\n");
