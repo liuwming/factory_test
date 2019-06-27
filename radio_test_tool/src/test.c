@@ -70,6 +70,7 @@ void audio_test_tick_cb();
 
 char universal_beacon_mac[128] = {0};
 char universal_beacon_key[128] = {0};
+extern int g_submodel;
 
 char TOKEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF,
@@ -78,10 +79,10 @@ char TOKEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF
 };
 
-#define TIME_SPACE_DURATION 40
-#define TIME_REPEAT_SPACE_SCANIP 15//默认1.5秒再次去搜索一次 
-#define TIME_INTERVAL_WAIT_SEND_ALL 18//18s
-#define TIME_INTERVAL_REPEAT_SEND 1.2//1.2s
+#define TIME_SPACE_DURATION         60  // Increase the number of test equipment
+#define TIME_REPEAT_SPACE_SCANIP    15  //默认1.5秒再次去搜索一次 
+#define TIME_INTERVAL_WAIT_SEND_ALL 18  //18s
+#define TIME_INTERVAL_REPEAT_SEND   1.2 //1.2s
 
 
 static radio_test_t   rt_cb = {
@@ -165,6 +166,7 @@ static void rt_tmr_func(int tid, void* data)
             break;
 #endif
         case RT_TMR_REPEAT_SEND:
+            message_r("Just a moment, please \r\n");
             repeat_send_exit_ble();  
             break;
         case RT_TMR_WAIT_SEND_ALL:
@@ -221,7 +223,7 @@ static char* parse_miio_rsp(rt_dev_t* dev, char* buf, int len)
     info = (char*)calloc(info_size*20, sizeof(char));
     info_len = decrypt(buf, len, dev->md5, info, info_size);
 
-    RT_ERR("Recv dev data mac:%d, content:%s\n", dev->mac[5], info);
+    RT_ERR("Recv dev data mac:%x, content:%s\n", dev->mac[5], info);
     return info;
 }
 
@@ -239,6 +241,7 @@ int check_beacon_id_confirm(rt_dev_t* dev, int pkg_id)
     }
     return num;
 }
+
 
 static int rt_miio_recv(io_inst_t* inst)
 {
@@ -325,6 +328,7 @@ static int rt_miio_recv(io_inst_t* inst)
                 memcpy(body, p1+1, p2-p1-1);
                 valid_body = 1;
             }
+
         }
 
         p1 = "\"id\":";
@@ -338,14 +342,30 @@ static int rt_miio_recv(io_inst_t* inst)
             check_beacon_id_confirm(dev, id);
 #endif
 
+            if (id == dev->submodel_data.submodel_send_id) {
+                message_r("body val: %s \r\n", body);
+
+                if  (strstr(body, "ok")) {
+                    dev->submodel_data.submode_confirmed = 1;      // set submodel ok!
+                    dev->submodel_data.submodel_send_id = dev_rpc_send(dev, "get_prop", "[\"sub_model\"]");
+                } else {
+                    memcpy(dev->submodel_data.submodel_val, body, strlen(body));
+                    if (dev->submodel_data.submode_confirmed == 1) {
+                        dev->submodel_data.submode_confirmed = 2;  // read submodel ok!
+                        message_r("++++report_status of submodel val = %s \r\n", dev->submodel_data.submodel_val);
+                        report_status(NULL, RT_CMD_SET_SUBMODEL);
+                    }
+                }
+            }
+
             if (id == dev->id_test_exit || strstr(body, "miio_test_exit_ok")) {
                 dev->test_exit_confirmed = 1;
                 snprintf(mac_str, sizeof(mac_str), "%02x:%02x:%02x:%02x:%02x:%02x",
-                dev->mac[0], dev->mac[1], dev->mac[2],
-                dev->mac[3], dev->mac[4], dev->mac[5]);
-            message_r("recv miio_test_exit_ok >>>>> mac:%s\n", mac_str);
-            del_timer(&(dev->tmr));
-            message_r("del dev-tmr ok >>>>>\n");
+                        dev->mac[0], dev->mac[1], dev->mac[2],
+                        dev->mac[3], dev->mac[4], dev->mac[5]);
+                message_r("recv miio_test_exit_ok >>>>> mac:%s\n", mac_str);
+                del_timer(&(dev->tmr));
+                message_r("del dev-tmr ok >>>>>\n");
 #if DONUT_SUPPORT
                 downleoad_audio_test_results(dev);
 #endif
@@ -501,7 +521,7 @@ static int dev_rpc_send(rt_dev_t* dev, char* method, char* param)
              METHOD, QT, method, QT,
              PARAMS, param);
 
-    //message_r("in dev_rpc_send ip[%s] data[%s] \n", dev->ip, rpc_buf);
+    // message_r("in dev_rpc_send ip[%s] data[%s] \n", dev->ip, rpc_buf);
     if (strstr(rpc_buf, "miio_test_exit")) {//avoid to loss miio_test_exit
         message_r("in dev_rpc_send find miio_test_exit >>>>>\n");
         return dev_raw_send(dev, rpc_buf);
@@ -584,8 +604,10 @@ static void rt_dev_tmr_func(int tid, void* data)
         }
     } else if (tid == RT_DEV_TMR_SENDMSG) {
         //message_r("RT_DEV_TMR_SENDMSG timeout dev_rpc_send [get_prop] >>>>>\n");
+        
         dev_rpc_send(dev, "get_prop", "[\"fw_ver\"]");
         dev->packet_send ++;
+
         if (dev->brs == -1 || dev->brf == -1) {
             dev_rpc_send(dev, "get_aging_status", "[]");
             dev->packet_send ++;
@@ -767,6 +789,8 @@ static rt_dev_t* rt_add_dev(unsigned char* mac)
     dev_start_tmr(dev, TIME_REPEAT_SPACE_SCANIP, RT_DEV_TMR_SCANIP, 0); /* scan for IP every 3 secs */
     dev->brs = -1;
     dev->brf = -1;
+    dev->submodel_data.submode_confirmed = 0;
+    dev->submodel_data.submodel_id = -1;
 #if BEACON_SUPPORT
     memset(&dev->beacon_data, 0, sizeof(ble_ctrls_data_t));
 #endif
@@ -805,6 +829,7 @@ void stop_hostapd_if_all_test_done()
         //}
     }
 
+    report_status(NULL, RT_CMD_CLOSE_SBOX);
     sleep(8);
 
     del_timer(&rt_cb.tmr_repeat_send);
@@ -876,10 +901,9 @@ void ctrl_dev3(char* dev_mac, ctrl_dev_cmd_t cmd, rt_client_t* clnt)
                 break;
             case CTRL_DEV_CMD_ADD_BEACON:
             {
-
                 sprintf(cmd_param, "{\"mac\":\"%s\",\"pid\":69,\"eid\":4097,\"beaconKey\":\"%s\"}",
                         universal_beacon_mac, universal_beacon_key);
-                message_r("recv client cmd = CTRL_DEV_CMD_ADD_BEACON\n\n");
+                message_r("CTRL_DEV_CMD_ADD_BEACON mac : %s\n\n", dev_mac);
 #if BEACON_SUPPORT
                 for(int i=0; i<sizeof(dev->beacon_data.beacon_param)/sizeof(dev->beacon_data.beacon_param[0]); i++){
                     if(strlen(&dev->beacon_data.beacon_param[i][0]) > 10){
@@ -890,6 +914,7 @@ void ctrl_dev3(char* dev_mac, ctrl_dev_cmd_t cmd, rt_client_t* clnt)
                         break;
                     }
                 }
+
 #endif
                 //dev_rpc_send(dev, "miIO.bleEvtRuleAdd", cmd_param);
                 #if BEACON_SUPPORT
@@ -913,8 +938,17 @@ void ctrl_dev3(char* dev_mac, ctrl_dev_cmd_t cmd, rt_client_t* clnt)
 
                 //dev_start_tmr(dev, 50, RT_DEV_TMR_DELAY_BEACON_SEND_ALL, 0);
                 #endif
-            }
-                break;
+            } break;
+            case CTRL_DEV_CMD_SET_SUBMODEL:
+            {
+                dev->test_result = RTT_PRE_PASS;
+
+                dev->submodel_data.submodel_id = g_submodel;
+                sprintf(cmd_param, "[\"sub_model\":\"%d\"]", dev->submodel_data.submodel_id);
+                dev->submodel_data.submodel_send_id = dev_rpc_send(dev, "set_ps", cmd_param);
+                message_r("+++++CTRL_DEV_CMD_SET_SUBMODEL  mac: %s, id = %d, val = %d \n\n", dev_mac,
+                        dev->submodel_data.submodel_send_id, dev->submodel_data.submodel_id);
+            } break;
             case CTRL_DEV_CMD_AUDIO_TEST:
                 dev_rpc_send(dev, "start_audio_test", "[80]");
                 dev->packet_send ++;
@@ -1065,6 +1099,11 @@ void report_status(rt_client_t* clnt, int type)
                 rt_res(packet_recv) = dev->packet_recv;
                 rt_res(brs) = dev->brs;
                 rt_res(brf) = dev->brf;
+
+                if (type == RT_CMD_SET_SUBMODEL) {
+                    memcpy(rt_res(submodel), dev->submodel_data.submodel_val,
+                            sizeof(dev->submodel_data.submodel_val));
+                }
 #if FCC_SUPPORT
                 rt_res(fcc) = dev->fcc;
 #endif
@@ -1088,7 +1127,6 @@ void report_status(rt_client_t* clnt, int type)
         clnt_broadcast_res(&result);
 }
 
-
 void repeat_sent_beacon(rt_dev_t* dev)
 {
     for(int i = 0; i < sizeof(dev->beacon_data.beacon_param)/sizeof(&dev->beacon_data.beacon_param[0]); i++){
@@ -1109,6 +1147,7 @@ void repeat_send_exit_ble()
     list_node_t* node;
     rt_dev_t* dev;
     char mac[32] = {0};
+    char cmd_param[128];
     
     list_for(&(rt_cb.dev_list), node) {
         dev = object_of(rt_dev_t, self, node);
@@ -1122,8 +1161,15 @@ void repeat_send_exit_ble()
             case RTT_PRE_FAIL:
                 if(!dev->test_exit_confirmed){
                     dev->id_test_exit = dev_rpc_send(dev, "miio_test_exit", "[1]");
-                    message_r("[%s] resend miio_test_exit [1] mac[5]:%d, id:%d\n\n", __func__, dev->mac[5], dev->id_test_exit);
+                    message_r("[%s] resend miio_test_exit [1] mac[5]:%d, id:%d\n\n", __func__, dev->mac, dev->id_test_exit);
                 }
+
+                if (dev->submodel_data.submode_confirmed != 2 && dev->submodel_data.submodel_id != -1) {
+                    sprintf(cmd_param, "[\"sub_model\":\"%d\"]", dev->submodel_data.submodel_id);
+                    dev->submodel_data.submodel_send_id = dev_rpc_send(dev, "set_ps", cmd_param);
+                    message_r("+++++[%s] resend sub_model mac[5]:%s, id:%d\n\n", __func__, dev->mac, dev->submodel_data.submodel_send_id);
+                }
+
 #if BEACON_SUPPORT
                 repeat_sent_beacon(dev);
 #endif
@@ -1131,7 +1177,13 @@ void repeat_send_exit_ble()
             case RTT_PRE_PASS:
                 if(!dev->test_exit_confirmed){
                     dev->id_test_exit = dev_rpc_send(dev, "miio_test_exit", "[0]");
-                    message_r("[%s] resend miio_test_exit [0] mac[5]:%d, id:%d\n\n", __func__, dev->mac[5], dev->id_test_exit);
+                    message_r("resend miio_test_exit [0] id_exit:%d,  mac:%d \n\n", dev->id_test_exit, dev->mac);
+                }
+
+                if (dev->submodel_data.submode_confirmed != 2 && dev->submodel_data.submodel_id != -1) {
+                    sprintf(cmd_param, "[\"sub_model\":\"%d\"]", dev->submodel_data.submodel_id);
+                    dev->submodel_data.submodel_send_id = dev_rpc_send(dev, "set_ps", cmd_param);
+                    message_r("+++++resend sub_model val:%d, id:%d mac: %d\n\n", dev->submodel_data.submodel_id, dev->submodel_data.submodel_send_id, dev->mac[5]);
                 }
 #if BEACON_SUPPORT
                 repeat_sent_beacon(dev);

@@ -72,6 +72,11 @@ typedef struct beacon_cmd{
     char           key[32];
 } beacon_cmd_param_t;
 
+typedef struct submodel_cmd{
+    char           mac_dev[32];
+    int            submodel;
+} submodel_cmd_param_t;
+
 typedef struct cmd {
     rt_cmd_type_t          type;
     union {

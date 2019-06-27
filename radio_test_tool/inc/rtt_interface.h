@@ -34,6 +34,7 @@ typedef enum {
     RT_CMD_START_AUDIO_TEST,
     RT_CMD_START_BLE_TEST,
     RT_CMD_GET_AUDIO_TEST, // 15
+    RT_CMD_SET_SUBMODEL,
     RT_CMD_PRINT_LABEL, /* rtt_server -> rtt client */
     RT_CMD_MAX,
     RT_CMD_INF=0xffffffff,
@@ -81,6 +82,11 @@ typedef struct cmd {
     } body;
 } rt_cmd_t;
 
+typedef struct submodel_cmd{
+    char           mac_dev[32];
+    int            submodel;
+} submodel_cmd_param_t;
+
 
     typedef enum {
         AUDIO_TEST_IDLE,
@@ -104,6 +110,7 @@ typedef struct rt_status {
     unsigned            packet_send;
     unsigned            packet_recv;
     char                fw_ver[16];
+    char                submodel[16];
     char                mac[32];
     char                ip[16];
     char                state[32];

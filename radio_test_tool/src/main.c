@@ -12,7 +12,7 @@
 #include <limits.h>
 #include <stdlib.h>
 
-char ver[] = "2.0";
+char ver[] = "2.1";
 static int rt_prepare(int);
 
 static int rt_prepare(int nr_itfc)

@@ -19,6 +19,7 @@ static io_inst_t cmd_inst;
 int alive = 1;
 static rt_client_t client_pool[MAX_RT_CLIENT];
 static rt_client_t udp_clnt;
+int g_submodel = -1;
 
 void clnt_result(rt_client_t* clnt, rt_cmd_type_t type_code, int code)
 {
@@ -191,6 +192,19 @@ static int rt_ota_dev(rt_client_t* clnt, void* arg)
     return 0;
 }
 
+static int rt_set_submodel(rt_client_t* clnt, void* arg)
+{
+    submodel_cmd_param_t *p_submodel = arg;
+    TRACE_IN();
+
+    g_submodel = p_submodel->submodel;
+    ctrl_dev(p_submodel->mac_dev, CTRL_DEV_CMD_SET_SUBMODEL);
+    clnt_result(clnt, RT_CMD_SET_SUBMODEL, RT_ERR_OK);
+
+    return 0;
+}
+
+
 /* attach remote controller*/
 static int rt_add_beacon(rt_client_t* clnt, void* arg)
 {
@@ -315,6 +329,7 @@ static cmd_handler_t rt_cmd_handler[] = {
     rt_start_audio_test,
     rt_start_ble_test,
     rt_get_audio_result,
+    rt_set_submodel
 };
 
 
@@ -500,11 +515,15 @@ void clnt_broadcast_res(rt_cmd_result_t* res)
 {
     int i;
     for (i = 0; i < ARR_SIZE(client_pool); i++) {
-        if (client_pool[i].busy == 1)
+        if (client_pool[i].busy == 1) {
             clnt_result2(&(client_pool[i]), res);
+        }
     }
-    if (udp_clnt.busy)
+
+    if (udp_clnt.busy) {
         clnt_result2(&(udp_clnt), res);
+    }
+
 }
 
 int cmd_init(char *ip)

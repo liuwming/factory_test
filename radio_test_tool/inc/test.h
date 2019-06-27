@@ -112,11 +112,19 @@ typedef enum {
     RTT_PRE_FAIL,
 } test_result_t;
 
+
 typedef struct {
     char beacon_param[10][128];//ble ctrl data,max 10
     char beacon_send_id[10];//send pkg id
     char beacon_confirmed[10];// if the pkg was confirmed this byte will be set to 1;
 } ble_ctrls_data_t;
+
+typedef struct {
+    char submodel_val[16];  //submodel 
+    int  submodel_id;       //submodel 
+    char submodel_send_id;  //send pkg id
+    char submode_confirmed; // if the pkg was confirmed this byte will be set to 2;
+} ctrl_submodel_t;
 /*
  * wifi/miio devices under test
  */
@@ -153,8 +161,10 @@ typedef struct rt_dev {
     io_inst_t           io;
     int                 test_result; // test_result_t
     rt_client_t         *clnt_interested; // the client to send the confirmation to
+
+    ctrl_submodel_t     submodel_data;
 #if BEACON_SUPPORT
-    ble_ctrls_data_t  beacon_data;
+    ble_ctrls_data_t    beacon_data;
 #endif 
 #if DONUT_SUPPORT
     int                 audio_test_result; // audio_test_result_t
@@ -194,6 +204,7 @@ typedef enum {
     CTRL_DEV_CMD_AUDIO_TEST = 4,
     CTRL_DEV_CMD_BLE_TEST   = 5,
     CTRL_DEV_CMD_AUDIO_RES  = 6,
+    CTRL_DEV_CMD_SET_SUBMODEL,
 } ctrl_dev_cmd_t;
 
 extern int start_test();
