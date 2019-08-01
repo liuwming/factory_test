@@ -79,10 +79,13 @@ char TOKEN[] = {
     0xFF, 0xFF, 0xFF, 0xFF
 };
 
+/* rt_start_tmr */
 #define TIME_SPACE_DURATION         60  // Increase the number of test equipment
-#define TIME_REPEAT_SPACE_SCANIP    15  //默认1.5秒再次去搜索一次 
 #define TIME_INTERVAL_WAIT_SEND_ALL 18  //18s
 #define TIME_INTERVAL_REPEAT_SEND   1.2 //1.2s
+
+/* dev_start_tmr */
+#define TIME_REPEAT_SPACE_SCANIP    15  //默认1.5秒再次去搜索一次 
 
 
 static radio_test_t   rt_cb = {
@@ -231,6 +234,7 @@ int check_beacon_id_confirm(rt_dev_t* dev, int pkg_id)
 {
     int num = 0;
 
+    message_r("recv confirm ack for beacon id:%d\n\n", pkg_id);
     for(int i=0; i<sizeof(dev->beacon_data.beacon_param)/sizeof(dev->beacon_data.beacon_param[0]); i++){
        if(pkg_id == dev->beacon_data.beacon_send_id[i]){
             message_r("recv confirm ack for beacon serial:%d id:%d\n\n",i, pkg_id);
@@ -280,7 +284,7 @@ static int rt_miio_recv(io_inst_t* inst)
         del_timer(&(dev->tmr));
 
         dev_rpc_send(dev, "miIO.info", "[]");
-        dev_start_tmr(dev, 100, RT_DEV_TMR_PROBE, 0);
+        dev_start_tmr(dev, 20, RT_DEV_TMR_PROBE, 0);
 
         dev->miio_dev_state = STATE_CONNECTING;
         break;
@@ -482,7 +486,7 @@ static void rt_miio_dev_hs(rt_dev_t* dev)
     init_msg_head(msg, 0xFFFFFFFFFFFFFFFF, 0xFFFFFFFF, TOKEN, header_size);
     dev_connect(dev);
     dev_send(dev, msg, header_size);
-    dev_start_tmr(dev, 50, RT_DEV_TMR_HANDSHAKE, 0);
+    dev_start_tmr(dev, 30, RT_DEV_TMR_HANDSHAKE, 0);
 }
 
 static int dev_raw_send(rt_dev_t* dev, char* raw)
@@ -604,7 +608,7 @@ static void rt_dev_tmr_func(int tid, void* data)
         }
     } else if (tid == RT_DEV_TMR_SENDMSG) {
         //message_r("RT_DEV_TMR_SENDMSG timeout dev_rpc_send [get_prop] >>>>>\n");
-        
+
         dev_rpc_send(dev, "get_prop", "[\"fw_ver\"]");
         dev->packet_send ++;
 
@@ -644,7 +648,7 @@ static void rt_dev_tmr_func(int tid, void* data)
 #endif
     } else if (tid == RT_DEV_TMR_HANDSHAKE) {
         RT_ERR("RT_DEV_TMR_HANDSHAKE timeout for dev %s\n", dev->ip);
-        if (dev->hand_shake_cnt++ > 3) {
+        if (dev->hand_shake_cnt++ > 5) {
             RT_ERR("handshake failure for dev %s\n", dev->ip);
             goto fail_miio_dev;
         }
@@ -657,35 +661,35 @@ static void rt_dev_tmr_func(int tid, void* data)
             goto fail_miio_dev;
         }
         dev_rpc_send(dev, "miIO.info", "[]");
-        dev_start_tmr(dev, 100, RT_DEV_TMR_PROBE, 0);
+        dev_start_tmr(dev, 20, RT_DEV_TMR_PROBE, 0);
     } 
-//    else if (tid == RT_DEV_TMR_TEST_EXIT_OK) {
-//        message_r("RT_DEV_TMR_TEST_EXIT_OK timeout waiting for test_exit_ok timeout >>>>>\n");
-//#if DONUT_SUPPORT
-//        downleoad_audio_test_results(dev);
-//#endif
-//        if (dev->clnt_interested) {
-//            if (dev->test_result == RTT_PRE_FAIL) {
-//                send_ctrl_dev_response(dev, RT_CMD_FAIL_DEV);
-//                dev->test_result = RTT_FAIL;
-//            } else {
-//                send_ctrl_dev_response(dev, RT_CMD_CTRL_DEV);
-//                dev->test_result = RTT_PASS;
-//            }
-//        }
-//#if !BEACON_SUPPORT
-//        stop_hostapd_if_all_test_done();
-//#endif
-//    }
+    //    else if (tid == RT_DEV_TMR_TEST_EXIT_OK) {
+    //        message_r("RT_DEV_TMR_TEST_EXIT_OK timeout waiting for test_exit_ok timeout >>>>>\n");
+    //#if DONUT_SUPPORT
+    //        downleoad_audio_test_results(dev);
+    //#endif
+    //        if (dev->clnt_interested) {
+    //            if (dev->test_result == RTT_PRE_FAIL) {
+    //                send_ctrl_dev_response(dev, RT_CMD_FAIL_DEV);
+    //                dev->test_result = RTT_FAIL;
+    //            } else {
+    //                send_ctrl_dev_response(dev, RT_CMD_CTRL_DEV);
+    //                dev->test_result = RTT_PASS;
+    //            }
+    //        }
+    //#if !BEACON_SUPPORT
+    //        stop_hostapd_if_all_test_done();
+    //#endif
+    //    }
     //else if(tid == RT_DEV_TMR_DELAY_BEACON_SEND_ALL){
     //     message_r("RT_DEV_TMR_DELAY_BEACON_SEND_ALL timeout try stop_hostapd_if_all_test_done >>>>>\n\n");
     //     stop_hostapd_if_all_test_done();
     //}
     return;
 
- fail_miio_dev:
+fail_miio_dev:
     dev->rt_dev_state = RT_DEV_CONN_FAILED;
-    message_r("RT_DEV_TMR_HANDSHAKE or RT_DEV_TMR_PROBE timeout for 3 times >>>>>\n");
+    message_r("RT_DEV_TMR_HANDSHAKE or RT_DEV_TMR_PROBE timeout for 5 times >>>>>\n");
     rtt_wait_pid(dev->async_pid);
     iomux_del(&(dev->io));
     close(dev->io.fd);
@@ -1129,6 +1133,7 @@ void report_status(rt_client_t* clnt, int type)
 
 void repeat_sent_beacon(rt_dev_t* dev)
 {
+    message_r("into repeat send beacon mac[5]:%d \n", dev->mac[5]);
     for(int i = 0; i < sizeof(dev->beacon_data.beacon_param)/sizeof(&dev->beacon_data.beacon_param[0]); i++){
         if(strlen(&dev->beacon_data.beacon_param[i][0]) > 10){//means has beacon key
             if(!dev->beacon_data.beacon_confirmed[i]){
